@@ -74,8 +74,8 @@ function render(d) {
     '<span class="pill"><b>' + T.solved + '</b> solved</span>',
     '<span class="pill"><b>' + T.replaced + '</b> replaced (provider failures)</span>',
     '<span class="pill">API spend <b>$' + (+T.spend_usd).toFixed(0) + '</b></span>'].join('');
-  document.getElementById('sum').innerHTML = '<tr><th>Model</th><th>pass@1</th><th>pass@3</th><th></th></tr>' + d.summary.map(s =>
-    '<tr' + (s.model.startsWith('Gemini 4 Carbon') ? ' class="carbon"' : '') + '><td>' + esc(s.model) + '</td><td>' + pct(s.pass1) + '</td><td>' + pct(s.pass3) +
+  document.getElementById('sum').innerHTML = '<tr><th>Model</th><th>pass@1</th><th>pass@3<br>(solved in ≥2 of 3, the package metric)</th><th>solved in any of 3<br>(standard pass@3)</th><th></th></tr>' + d.summary.map(s =>
+    '<tr' + (s.model.startsWith('Gemini 4 Carbon') ? ' class="carbon"' : '') + '><td>' + esc(s.model) + '</td><td>' + pct(s.pass1) + '</td><td>' + pct(s.pass3) + '</td><td>' + pct(s.any3) +
     '</td><td class="muted">' + (s.live ? 'so far · pass@3 over ' + s.tasks + ' complete tasks' : (s.model.startsWith('Gemini 4 Carbon') ? 'final' : 'published runs')) + '</td></tr>').join('');
   document.getElementById('vms').innerHTML = d.vms.map(v => '<div class="vm"><b>' + esc(v.vm.replace('cadgui-carbonh-', '')) + '</b> · ' + esc(v.state) +
     ' · ' + v.running + ' running · ' + v.finished + ' done · ' + v.tasks + ' tasks</div>').join('');
