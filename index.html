@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Carbon Run Tracker</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1d1d1b;--muted:#6b6a65;--line:#e4e2dc;--card:#ffffff;--ok:#1f7a3a;--okbg:#e5f4e4;--bad:#a8322d;--badbg:#fbebeb;
+--run:#1d5fa8;--runbg:#e7f1fb;--grade:#6b46c1;--gradebg:#efedff;--ex:#7a7770;--exbg:#f0efec;--warn:#9a5b00;--warnbg:#f9eeda}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--fg:#ecebe6;--muted:#a3a19a;--line:#2f2e2b;--card:#1c1c1a;
+--ok:#7fd49a;--okbg:#18301f;--bad:#f0938e;--badbg:#3a1d1b;--run:#8cb8ee;--runbg:#17283d;--grade:#b9a6f5;--gradebg:#26203d;--ex:#a3a19a;--exbg:#2a2926;--warn:#e6b25c;--warnbg:#33270f}}
+:root[data-theme="dark"]{--bg:#151514;--fg:#ecebe6;--muted:#a3a19a;--line:#2f2e2b;--card:#1c1c1a;
+--ok:#7fd49a;--okbg:#18301f;--bad:#f0938e;--badbg:#3a1d1b;--run:#8cb8ee;--runbg:#17283d;--grade:#b9a6f5;--gradebg:#26203d;--ex:#a3a19a;--exbg:#2a2926;--warn:#e6b25c;--warnbg:#33270f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+main{max-width:1180px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:22px;margin:0 0 4px}
+p.sub{color:var(--muted);margin:0 0 16px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 18px}
+.pill{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+.pill b{font-variant-numeric:tabular-nums}
+h2{font-size:15px;margin:22px 0 8px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle;font-variant-numeric:tabular-nums}
+th{font-size:12px;color:var(--muted);font-weight:600;background:var(--bg)}
+tr:last-child td{border-bottom:none}
+.wrap{overflow-x:auto}
+.chip{display:inline-block;border-radius:6px;padding:2px 7px;margin:1px 3px 1px 0;font-size:12px;white-space:nowrap}
+.ok{background:var(--okbg);color:var(--ok)}.bad{background:var(--badbg);color:var(--bad)}.run{background:var(--runbg);color:var(--run)}
+.grade{background:var(--gradebg);color:var(--grade)}.ex{background:var(--exbg);color:var(--ex);text-decoration:line-through}
+.q{background:var(--exbg);color:var(--muted)}.warn{background:var(--warnbg);color:var(--warn)}
+.muted{color:var(--muted)}.carbon{font-weight:600}
+.vms{display:flex;flex-wrap:wrap;gap:8px}
+.vm{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px}
+footer{color:var(--muted);font-size:12px;margin-top:22px}
+</style></head><body><main>
+<h1>Gemini 4 Carbon (high) · pass@3 on 50 hard SteelEnv code tasks</h1>
+<p class="sub">The 50 Frontier v2 headline tasks that both GPT-6 Astra (high) and Claude Opus 5.5 (high) failed at least 2 of 3 times. Same task versions, harness and limits as their published runs.</p>
+<div class="bar" id="bar"><span class="pill">Loading…</span></div>
+<h2>Pass rates on these 50 tasks</h2>
+<div class="wrap"><table id="sum"></table></div>
+<h2>Machines</h2>
+<div class="vms" id="vms"></div>
+<h2>Tasks</h2>
+<div class="wrap"><table id="tasks"></table></div>
+<footer>A try counts unless it ended on a model-provider failure with no output file; such tries are replaced (struck through, reason on hover). Graded zeros and timeouts count. Carbon pass@3 covers tasks with all 3 counted tries. The page reads live data every 2 minutes.</footer>
+</main><script>
+const API = 'https://api.github.com/repos/dhigdec/steelenv-carbon-tracker/contents/status.json?ref=data';
+const RAW = 'https://raw.githubusercontent.com/dhigdec/steelenv-carbon-tracker/data/status.json';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const pct = x => x == null ? '–' : (100 * x).toFixed(1) + '%';
+function ago(s) {
+  if (!s) return '';
+  const m = Math.round((Date.now() - Date.parse(s)) / 60000);
+  return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min ago';
+}
+function mins(a, b) {
+  if (!a) return '';
+  const e = (b ? Date.parse(b) : Date.now()) - Date.parse(a);
+  return Math.max(0, Math.round(e / 60000)) + 'm';
+}
+function chip(t) {
+  if (t.excluded) return '<span class="chip ex" title="' + esc(t.excluded) + '">replaced</span>';
+  if (t.state === 'running') return '<span class="chip run">▶ ' + (t.turns || 0) + ' turns · ' + mins(t.started) + '</span>';
+  if (t.state === 'starting') return '<span class="chip q">starting · ' + mins(t.started) + '</span>';
+  if (t.state === 'grading') return '<span class="chip grade">grading</span>';
+  if (t.reward == null) return '<span class="chip warn" title="ended without a reward; re-graded at the end">no reward yet</span>';
+  const r = +t.reward, tip = (t.turns || 0) + ' turns · ' + mins(t.started, t.finished);
+  return '<span class="chip ' + (r >= 0.9999 ? 'ok' : 'bad') + '" title="' + tip + '">' + (r >= 0.9999 ? '1.0' : r.toFixed(2)) + '</span>';
+}
+function render(d) {
+  const T = d.totals;
+  document.getElementById('bar').innerHTML = [
+    '<span class="pill">' + (d.final ? '<b>Final</b>' : 'Updated <b>' + ago(d.updated) + '</b>') + '</span>',
+    '<span class="pill"><b>' + T.finished + '</b>/' + T.planned + ' tries finished</span>',
+    '<span class="pill"><b>' + T.running + '</b> running</span>',
+    '<span class="pill"><b>' + T.solved + '</b> solved</span>',
+    '<span class="pill"><b>' + T.replaced + '</b> replaced (provider failures)</span>',
+    '<span class="pill">API spend <b>$' + (+T.spend_usd).toFixed(0) + '</b></span>'].join('');
+  document.getElementById('sum').innerHTML = '<tr><th>Model</th><th>pass@1</th><th>pass@3</th><th></th></tr>' + d.summary.map(s =>
+    '<tr' + (s.model.startsWith('Gemini 4 Carbon') ? ' class="carbon"' : '') + '><td>' + esc(s.model) + '</td><td>' + pct(s.pass1) + '</td><td>' + pct(s.pass3) +
+    '</td><td class="muted">' + (s.live ? 'so far · pass@3 over ' + s.tasks + ' complete tasks' : (s.model.startsWith('Gemini 4 Carbon') ? 'final' : 'published runs')) + '</td></tr>').join('');
+  document.getElementById('vms').innerHTML = d.vms.map(v => '<div class="vm"><b>' + esc(v.vm.replace('cadgui-carbonh-', '')) + '</b> · ' + esc(v.state) +
+    ' · ' + v.running + ' running · ' + v.finished + ' done · ' + v.tasks + ' tasks</div>').join('');
+  const models = Object.keys(d.tasks[0].compare);
+  document.getElementById('tasks').innerHTML = '<tr><th>Task</th><th>Family</th><th>Tier</th>' + models.map(m => '<th>' + esc(m).replace(' (', '<br>(') + '</th>').join('') +
+    '<th>Carbon (high) tries</th><th>Carbon</th></tr>' + d.tasks.map(t => '<tr><td>' + esc(t.task) + '</td><td>' + esc(t.family) + '</td><td>' + esc(t.tier) + '</td>' +
+    models.map(m => '<td>' + esc(t.compare[m]) + '</td>').join('') + '<td>' + (t.tries.length ? t.tries.map(chip).join('') : '<span class="chip q">queued</span>') +
+    '</td><td class="carbon">' + esc(t.carbon) + '</td></tr>').join('');
+}
+async function load() {
+  let d = null;
+  try { const r = await fetch(API, {headers: {'Accept': 'application/vnd.github.raw+json'}, cache: 'no-store'}); if (r.ok) d = await r.json(); } catch (e) {}
+  if (!d) { try { const r = await fetch(RAW + '?t=' + Date.now(), {cache: 'no-store'}); if (r.ok) d = await r.json(); } catch (e) {} }
+  if (d) render(d);
+}
+load();
+setInterval(load, 120000);
+</script></body></html>
